@@ -14,6 +14,7 @@
 #import "IPSReport+CrashRepresentation.h"
 
 #import "IPSThreadState+RegisterDisplayName.h"
+#import "IPSImage+UserCode.h"
 
 #import "IPSDateFormatter.h"
 
@@ -145,7 +146,7 @@
         [tMutableString appendString:@"\n"];
     }
     
-    [tMutableString appendFormat:@"Code Type:             %@\n",tHeader.cpuType];
+    [tMutableString appendFormat:@"Code Type:             %@ (%@)\n",tHeader.cpuType,(tHeader.translated==NO) ? @"Native" : @"Translated"];
     
     [tMutableString appendFormat:@"Parent Process:        %@ [%d]\n",tHeader.parentProcessName,tHeader.parentProcessID];
     
@@ -189,7 +190,7 @@
     
     IPSLegacyInfo * tLegacyInfo=tExceptionInformation.legacyInfo;
     
-    if (tLegacyInfo.threadTriggered.queue!=nil)
+    if (tLegacyInfo!=nil && tLegacyInfo.threadTriggered.queue!=nil)
     {
         [tMutableString appendFormat:@"  Dispatch queue: %@\n",tLegacyInfo.threadTriggered.queue];
     }
@@ -222,15 +223,15 @@
     
     IPSTermination * tTermination=tExceptionInformation.termination;
     
-    [tMutableString appendFormat:@"Termination Reason:    Namespace %@, Code 0x%lx\n",tTermination.namespace,(unsigned long)tTermination.code];
-    
-    if (tTermination.byProc!=nil)
+    if (tTermination!=nil)
     {
-        [tMutableString appendFormat:@"Terminating Process:   %@ [%d]\n",tTermination.byProc,tTermination.byPid];
+        [tMutableString appendFormat:@"Termination Reason:    Namespace %@, Code 0x%lx\n",tTermination.namespace,(unsigned long)tTermination.code];
+        
+        if (tTermination.byProc!=nil)
+            [tMutableString appendFormat:@"Terminating Process:   %@ [%d]\n",tTermination.byProc,tTermination.byPid];
+        
+        [tMutableString appendString:@"\n"];
     }
-    
-    [tMutableString appendString:@"\n"];
-    
     
     // Diagnostic Message
     
@@ -284,17 +285,22 @@
             
             NSUInteger tAddress=tBinaryImage.loadAddress+bFrame.imageOffset;
             
-            NSUInteger tImageNameLength=tBinaryImage.name.length;
+            NSString * tImageIdentifier=(tBinaryImage.bundleIdentifier!=nil) ? tBinaryImage.bundleIdentifier : tBinaryImage.name;
+            
+            if (tImageIdentifier.length==0)
+                tImageIdentifier=@"???";
+            
+            NSUInteger tImageNameLength=tImageIdentifier.length;
             
             if ((tImageNameLength+4)>BINARYIMAGENAME_AND_SPACE_MAXLEN)
             {
-                [tMutableString appendFormat:@"%@    ",tBinaryImage.name];
+                [tMutableString appendFormat:@"%@    ",tImageIdentifier];
             }
             else
             {
                 NSString * tImageSpace=[@"                                  " substringFromIndex:tImageNameLength];
                 
-                [tMutableString appendFormat:@"%@%@",tBinaryImage.name,tImageSpace];
+                [tMutableString appendFormat:@"%@%@",tImageIdentifier,tImageSpace];
             }
             
             if (bFrame.symbol!=nil)
@@ -333,7 +339,7 @@
     {
         NSDictionary * tCPUFamiliesRegistry=@{
                                     @"X86-64":@"X86",
-                                    @"arm64":@"ARM"
+                                    @"ARM-64":@"ARM"
                                     };
         
         NSString * tCPUFamily=tCPUFamiliesRegistry[tHeader.cpuType];
@@ -343,7 +349,7 @@
         
         NSDictionary * tCPUSizeRegistry=@{
                                           @"X86-64":@"64-bit",
-                                          @"arm64":@"64-bit"
+                                          @"ARM-64":@"64-bit"
                                           };
         
         NSString * tCPUSize=tCPUSizeRegistry[tHeader.cpuType];
@@ -448,11 +454,17 @@
     
     if (tIncident.binaryImages.count>0)
     {
-        [tMutableString appendString:@"Binary Images\n"];
+        [tMutableString appendString:@"Binary Images:\n"];
         
         [[tIncident.binaryImages sortedArrayUsingSelector:@selector(compare:)] enumerateObjectsUsingBlock:^(IPSImage * bImage, NSUInteger bIndex, BOOL * bOutStop) {
             
+            if ([bImage.source isEqualToString:@"A"]==YES)
+                return;
+            
             [tMutableString appendFormat:@"%@ - %@ ",[IPSReport binaryImageStringForAddress:bImage.loadAddress],[IPSReport binaryImageStringForAddress:bImage.loadAddress+bImage.size]];
+            
+            if (bImage.isUserCode==YES)
+                [tMutableString appendString:@"+"];
             
             if (bImage.bundleIdentifier!=nil)
                 [tMutableString appendFormat:@"%@ ",bImage.bundleIdentifier];
