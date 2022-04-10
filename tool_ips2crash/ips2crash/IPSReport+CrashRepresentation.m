@@ -78,7 +78,7 @@
     NSMutableString * tMutableString=[NSMutableString string];
     
     [tRegistersOrder enumerateObjectsUsingBlock:^(NSString * bRegisterName, NSUInteger bIndex, BOOL * bOutStop) {
-       
+        
         IPSRegisterState * tRegisterState=inThreadState.registersStates[bRegisterName];
         
         if (tRegisterState!=nil)
@@ -88,16 +88,16 @@
             if (tTranslatedName.length<5)
                 for(NSUInteger tWhitespace=0;tWhitespace<(5-tTranslatedName.length);tWhitespace++)
                     [tMutableString appendString:@" "];
-        
+            
             IPSRegisterState * tRegisterState=inThreadState.registersStates[bRegisterName];
-        
+            
             if (tRegisterState!=nil)
                 [tMutableString appendFormat:@"%@: 0x%016lx",tTranslatedName,tRegisterState.value];
         }
         
         if ((bIndex%4)==3)
             [tMutableString appendString:@"\n"];
-            
+        
     }];
     
     return [tMutableString copy];
@@ -251,13 +251,37 @@
             [tMutableString appendString:@"Application Specific Information:\n"];
             
             [tDiagnosticMessage.asi.applicationsInformation enumerateKeysAndObjectsUsingBlock:^(NSString * bProcess, NSArray * bInformation, BOOL * bOutStop) {
-               
+                
                 [bInformation enumerateObjectsUsingBlock:^(NSString * bInformation, NSUInteger bIndex, BOOL * bOutStop2) {
                     
                     [tMutableString appendFormat:@"%@\n",bInformation];
                 }];
                 
             }];
+            
+            if (tDiagnosticMessage.asi.signatures!=nil)
+            {
+                [tMutableString appendString:@"\n"];
+                
+                [tMutableString appendString:@"Application Specific Signatures:\n"];
+                
+                [tDiagnosticMessage.asi.signatures enumerateObjectsUsingBlock:^(NSString * bSignature, NSUInteger bIndex, BOOL * bOutStop) {
+                    
+                    [tMutableString appendFormat:@"%@\n",bSignature];
+                }];
+            }
+            
+            if (tDiagnosticMessage.asi.backtraces!=nil)
+            {
+                [tMutableString appendString:@"\n"];
+                
+                [tDiagnosticMessage.asi.backtraces enumerateObjectsUsingBlock:^(NSString * bBacktrace, NSUInteger bIndex, BOOL * bOutStop) {
+                    
+                    [tMutableString appendFormat:@"Application Specific Backtrace %lu:\n",bIndex+1];
+                    
+                    [tMutableString appendFormat:@"%@\n",bBacktrace];
+                }];
+            }
             
             [tMutableString appendString:@"\n"];
         }
@@ -269,9 +293,20 @@
         
         NSString * tCrashedString=(bThread.triggered==YES) ? @" Crashed":@"";
         
-        NSString * tDispatchQueueString=(bThread.queue!=nil) ? [NSString stringWithFormat:@": Dispatch queue: %@",bThread.queue] : @"";
+        [tMutableString appendFormat:@"Thread %lu%@:",(unsigned long)bThreadIndex,tCrashedString];
         
-        [tMutableString appendFormat:@"Thread %lu%@:%@\n",(unsigned long)bThreadIndex,tCrashedString,tDispatchQueueString];
+        if (bThread.name!=nil || bThread.queue!=nil)
+        {
+            [tMutableString appendString:@": "];
+            
+            if (bThread.name!=nil)
+                [tMutableString appendString:bThread.name];
+            
+            if (bThread.queue!=nil)
+                [tMutableString appendFormat:@"%@Dispatch queue: %@",(bThread.name!=nil) ? @"  ": @"",bThread.queue];
+        }
+        
+        [tMutableString appendString:@"\n"];
         
         [bThread.frames enumerateObjectsUsingBlock:^(IPSThreadFrame * bFrame, NSUInteger bFrameIndex, BOOL * _Nonnull stop) {
             
@@ -338,9 +373,9 @@
     if (tCrashedThreadState!=nil)
     {
         NSDictionary * tCPUFamiliesRegistry=@{
-                                    @"X86-64":@"X86",
-                                    @"ARM-64":@"ARM"
-                                    };
+                                              @"X86-64":@"X86",
+                                              @"ARM-64":@"ARM"
+                                              };
         
         NSString * tCPUFamily=tCPUFamiliesRegistry[tHeader.cpuType];
         
@@ -380,7 +415,7 @@
                 [tMutableString appendFormat:@" %@",tRegisterState.r_description];
             
             [tMutableString appendString:@"\n"];
-
+            
             [tMutableString appendFormat:@"Trap Number:     %lu\n",tRegisterState.value];
         }
         
@@ -397,7 +432,7 @@
         if (tStream!=nil)
         {
             [tMutableString appendFormat:@"Thread %lu instruction stream:\n",tExceptionInformation.faultingThread];
-         
+            
             uint8_t * tBytes=tStream.bytes;
             NSUInteger tBytesCount=tStream.bytesCount;
             
