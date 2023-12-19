@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2021, Stephane Sudre
+ Copyright (c) 2021-2022, Stephane Sudre
  All rights reserved.
  
  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
@@ -16,6 +16,7 @@
 #import "IPSReport.h"
 
 #import "IPSReport+CrashRepresentation.h"
+#import "IPSReport+Obfuscating.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -28,7 +29,8 @@ void usage(void)
     (void)fprintf(stderr, "%s\n","Usage: ips2crash [OPTIONS] file\n"
                   "\n"
                   "Options:\n"
-                  "  --output, -o PATH    use this folder as the temporary build folder\n");
+                  "  --obfuscate -O       obfuscate user code symbols, binaries and paths\n"
+                  "  --output, -o PATH    specify a file path to write the converted crash report to\n");
     
     exit(EXIT_FAILURE);
 }
@@ -38,13 +40,14 @@ int main(int argc, const char * argv[])
     @autoreleasepool
     {
         char * tCOutputPath=NULL;
-        
+        BOOL tObfuscate=NO;
         int c;
         
         static struct option tLongOptions[] =
         {
             {"verbose",                        no_argument,        0,    'v'},
             
+            {"obfuscate", no_argument,          0,    'O'},
             {"output",    required_argument,    0,    'o'},
             
             {0, 0, 0, 0}
@@ -54,7 +57,7 @@ int main(int argc, const char * argv[])
         {
             int tOptionIndex = 0;
             
-            c = getopt_long (argc, (char **) argv, "o:",tLongOptions, &tOptionIndex);
+            c = getopt_long (argc, (char **) argv, "Oo:",tLongOptions, &tOptionIndex);
             
             /* Detect the end of the options. */
             if (c == -1)
@@ -62,6 +65,12 @@ int main(int argc, const char * argv[])
             
             switch (c)
             {
+                case 'O':
+                    
+                    tObfuscate=YES;
+                    
+                    break;
+                
                 case 'o':
                     
                     tCOutputPath=optarg;
@@ -108,7 +117,7 @@ int main(int argc, const char * argv[])
         
         if (argc>0)
         {
-            (void)fprintf(stderr, "An error occurred while parsing %s.\n",*argv);
+            (void)fprintf(stderr, "An error occurred while parsing %s: too many arguments.\n",*argv);
             usage();
             
             return EXIT_FAILURE;
@@ -168,6 +177,18 @@ int main(int argc, const char * argv[])
                         (void)fprintf(stderr, "Invalid value for key: %s.\n",tKeyPath.UTF8String);
                         
                         break;
+                        
+                    case IPSSummaryReadCorruptError:
+                        
+                        (void)fprintf(stderr, "Corrupted ips file.\n");
+                        
+                        break;
+                    
+                    case IPSUnsupportedBugTypeError:
+                        
+                        (void)fprintf(stderr, "Unsupported type of .ips report: %ld.\n",[tError.userInfo[IPSBugTypeErrorKey] integerValue]);
+                        
+                        break;
                 }
             }
             else
@@ -176,6 +197,13 @@ int main(int argc, const char * argv[])
             }
             
             return EXIT_FAILURE;
+        }
+        
+        if (tObfuscate==YES)
+        {
+            IPSObfuscator * tObfuscator=[IPSObfuscator new];
+            
+            tReport=[tReport obfuscateWithObfuscator:tObfuscator];
         }
         
         NSString * tString=[tReport crashTextualRepresentation];
@@ -190,15 +218,40 @@ int main(int argc, const char * argv[])
         if ([tString writeToFile:tOutputCrashFile atomically:YES encoding:NSUTF8StringEncoding error:&tError]==YES)
             return EXIT_SUCCESS;
         
-        (void)fprintf(stderr, "An error occurred when reading the file '%s'.\n",tIPSFile.fileSystemRepresentation);
+        (void)fprintf(stderr, "'%s': An error occurred when writing the file.\n",tOutputCrashFile.fileSystemRepresentation);
         
         if ([tError.domain isEqualToString:NSCocoaErrorDomain]==YES)
         {
-            // A COMPLETER
+            switch(tError.code)
+            {
+                case NSFileWriteNoPermissionError:
+                    
+                    (void)fprintf(stderr, "Permission denied.\n");
+                    
+                    break;
+                    
+                case NSFileWriteOutOfSpaceError:
+                    
+                    (void)fprintf(stderr, "No more space available on volume.\n");
+                    
+                    break;
+                    
+                case NSFileWriteVolumeReadOnlyError:
+                    
+                    (void)fprintf(stderr, "Volume is readonly.\n");
+                    
+                    break;
+                    
+                default:
+                    
+                    (void)fprintf(stderr, "%s\n",tError.description.UTF8String);
+                    
+                    break;
+            }
         }
         else
         {
-            // A COMPLETER
+            (void)fprintf(stderr, "%s\n",tError.description.UTF8String);
         }
     }
     

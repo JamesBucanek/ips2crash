@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2021, Stephane Sudre
+ Copyright (c) 2021-2022, Stephane Sudre
  All rights reserved.
  
  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
@@ -13,6 +13,8 @@
 
 #import "IPSReport.h"
 
+#import "IPSSummarySerialization.h"
+
 @interface IPSReport ()
 
     @property (readwrite) IPSSummary * summary;
@@ -22,6 +24,23 @@
 @end
 
 @implementation IPSReport
+
+- (instancetype)initWithSummary:(IPSSummary *)inSummary incident:(IPSIncident *)inIncident
+{
+    if ([inSummary isKindOfClass:[IPSSummary class]]==NO ||
+        [inIncident isKindOfClass:[IPSIncident class]]==NO)
+        return nil;
+    
+    self=[super init];
+    
+    if (self!=nil)
+    {
+        _summary=inSummary;
+        _incident=inIncident;
+    }
+    
+    return self;
+}
 
 - (instancetype)initWithContentsOfURL:(NSURL *)inURL error:(out NSError **)outError
 {
@@ -115,7 +134,9 @@
         if (tRange.location==NSNotFound)
         {
             if (outError!=NULL)
-                *outError=nil;  // A COMPLETER
+                *outError=[NSError errorWithDomain:IPSErrorDomain
+                                              code:IPSSummaryReadCorruptError
+                                          userInfo:@{}];
             
             return nil;
         }
@@ -123,12 +144,20 @@
         // Summary
         
         NSString * tFirstLine=[inString substringWithRange:tRange];
+
+        if (tFirstLine==nil)
+        {
+            if (outError!=NULL)
+                *outError=[NSError errorWithDomain:IPSErrorDomain
+                                              code:IPSSummaryReadCorruptError
+                                          userInfo:@{}];
+            
+            return nil;
+        }
         
-        NSData * tSummaryData=[tFirstLine dataUsingEncoding:NSUTF8StringEncoding];
+        _summary=[IPSSummarySerialization summaryWithData:[tFirstLine dataUsingEncoding:NSUTF8StringEncoding] error:&tError];
         
-        NSDictionary * tSummaryDictionary=[NSJSONSerialization JSONObjectWithData:tSummaryData options:NSJSONReadingAllowFragments error:&tError];
-        
-        if (tSummaryDictionary==nil)
+        if (_summary==nil)
         {
             if (outError!=NULL)
                 *outError=tError;
@@ -136,13 +165,12 @@
             return nil;
         }
         
-        tError=nil;
-        _summary=[[IPSSummary alloc] initWithRepresentation:tSummaryDictionary error:&tError];
-        
-        if (_summary==nil)
+        if (_summary.bugType!=IPSBugTypeCrash)
         {
             if (outError!=NULL)
-                *outError=tError;
+                *outError=[NSError errorWithDomain:IPSErrorDomain
+                                              code:IPSUnsupportedBugTypeError
+                                          userInfo:@{IPSBugTypeErrorKey:@(_summary.bugType)}];
             
             return nil;
         }
@@ -199,6 +227,22 @@
     }
     
     return self;
+}
+
+#pragma mark - NSCopying
+
+- (id)copyWithZone:(NSZone *)inZone
+{
+    IPSReport * nReport=[IPSReport allocWithZone:inZone];
+    
+    if (nReport!=nil)
+    {
+        nReport->_summary=[self.summary copyWithZone:inZone];
+        
+        nReport->_incident=[self.incident copyWithZone:inZone];
+    }
+    
+    return nReport;
 }
 
 @end

@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2021, Stephane Sudre
+ Copyright (c) 2021-2022, Stephane Sudre
  All rights reserved.
  
  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
@@ -78,9 +78,12 @@ NSString * const IPSExceptionRawCodesKey=@"rawCodes";
         
         tString=inRepresentation[IPSExceptionSignalKey];
         
-        IPSFullCheckStringValueForKey(tString,IPSExceptionSignalKey);
+        if (tString!=nil)
+        {
+            IPSFullCheckStringValueForKey(tString,IPSExceptionSignalKey);
         
-        _signal=[tString copy];
+            _signal=[tString copy];
+        }
         
         tString=inRepresentation[IPSExceptionCodesKey];
         
@@ -118,6 +121,28 @@ NSString * const IPSExceptionRawCodesKey=@"rawCodes";
         tMutableDictionary[IPSExceptionRawCodesKey]=self.rawCodes;
     
     return [tMutableDictionary copy];
+}
+
+#pragma mark - NSCopying
+
+- (id)copyWithZone:(NSZone *)inZone
+{
+    IPSException * nException=[IPSException allocWithZone:inZone];
+    
+    if (nException!=nil)
+    {
+        nException->_type=[self.type copyWithZone:inZone];
+        
+        nException->_subtype=[self.subtype copyWithZone:inZone];
+        
+        nException->_signal=[self.signal copyWithZone:inZone];
+        
+        nException->_codes=[self.codes copyWithZone:inZone];
+        
+        nException->_rawCodes=[self.rawCodes copyWithZone:inZone];
+    }
+    
+    return nException;
 }
 
 @end
